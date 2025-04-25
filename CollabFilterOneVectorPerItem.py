@@ -15,8 +15,8 @@ from AbstractBaseCollabFilterSGD import AbstractBaseCollabFilterSGD
 from train_valid_test_loader import load_train_valid_test_datasets
 
 # Some packages you might need (uncomment as necessary)
-## import pandas as pd
-## import matplotlib
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # No other imports specific to ML (e.g. scikit) needed!
 
@@ -39,6 +39,7 @@ class CollabFilterOneVectorPerItem(AbstractBaseCollabFilterSGD):
     Inherits *fit* method from AbstractBaseCollabFilterSGD.
     '''
 
+    # takes in number of users, number of movies, 
     def init_parameter_dict(self, n_users, n_items, train_tuple):
         ''' Initialize parameter dictionary attribute for this instance.
 
@@ -54,11 +55,17 @@ class CollabFilterOneVectorPerItem(AbstractBaseCollabFilterSGD):
         # TODO fix the lines below to have right dimensionality & values
         # TIP: use self.n_factors to access number of hidden dimensions
         self.param_dict = dict(
+            # global average rating
             mu=ag_np.ones(1),
-            b_per_user=ag_np.ones(1), # FIX dimensionality
-            c_per_item=ag_np.ones(1), # FIX dimensionality
-            U=0.001 * random_state.randn(1), # FIX dimensionality
-            V=0.001 * random_state.randn(1), # FIX dimensionality
+            # lets us know how much the user overrates/underrates the movies
+            b_per_user=ag_np.ones(n_users),
+            # how much more or less do people like this movie
+            c_per_item=ag_np.ones(n_items), 
+
+            # vector representing user preferences
+            U=0.001 * random_state.randn(n_users, self.n_factors),
+            # vector representing movie traits, projected to the same traits
+            V=0.001 * random_state.randn(n_items, self.n_factors), 
             )
 
 
@@ -80,12 +87,23 @@ class CollabFilterOneVectorPerItem(AbstractBaseCollabFilterSGD):
             Scalar predicted ratings, one per provided example.
             Entry n is for the n-th pair of user_id, item_id values provided.
         '''
-        # TODO: Update with actual prediction logic
-        N = user_id_N.size
-        yhat_N = ag_np.ones(N)
-        return yhat_N
+        # Get user and movie vectosr, both will be (N, n_factors)
+        user_vectors = U[user_id_N]
+        item_vectors = V[item_id_N]
 
+        # do dot product between user and item vectors
+        interaction_scores = ag_np.sum(user_vectors * item_vectors, axis=1)  # shape (N,)
 
+        # Get user and item biases
+        user_biases = b_per_user[user_id_N]  # shape (N,)
+        item_biases = c_per_item[item_id_N]  # shape (N,)
+
+        # Combine everything to get the predicted ratings
+        yhat_N = mu[0] + user_biases + item_biases + interaction_scores
+
+        return yhat_N  # shape (N,)
+    
+    # data type is just the observed datasets
     def calc_loss_wrt_parameter_dict(self, param_dict, data_tuple):
         ''' Compute loss at given parameters
 
@@ -99,12 +117,24 @@ class CollabFilterOneVectorPerItem(AbstractBaseCollabFilterSGD):
         -------
         loss : float scalar
         '''
-        # TODO compute loss
-        # TIP: use self.alpha to access regularization strength
+        # Unpack true ratings
         y_N = data_tuple[2]
+
+        # Predict ratings using current parameters
         yhat_N = self.predict(data_tuple[0], data_tuple[1], **param_dict)
-        loss_total = 0.0
-        return loss_total    
+
+        # Compute squared error loss
+        squared_errors = ag_np.square(y_N - yhat_N)
+        mse_loss = 0.5 * ag_np.mean(squared_errors)
+
+        # Add l2 regularization on our terms
+        U = param_dict['U']
+        V = param_dict['V']
+        l2_penalty = 0.5 * self.alpha * (ag_np.sum(U ** 2) + ag_np.sum(V ** 2))
+
+        # Total loss = MSE + regularization
+        loss_total = mse_loss + l2_penalty
+        return loss_total   
 
 
 if __name__ == '__main__':
@@ -113,11 +143,82 @@ if __name__ == '__main__':
     train_tuple, valid_tuple, test_tuple, n_users, n_items = \
         load_train_valid_test_datasets()
     # Create the model and initialize its parameters
-    # to have right scale as the dataset (right num users and items)
-    model = CollabFilterOneVectorPerItem(
-        n_epochs=10, batch_size=10000, step_size=0.1,
-        n_factors=2, alpha=0.0)
-    model.init_parameter_dict(n_users, n_items, train_tuple)
 
-    # Fit the model with SGD
-    model.fit(train_tuple, valid_tuple)
+
+    # RUN FOR THE 3(i)
+    # K_values = [2, 10, 50]
+    K_values = [2]
+    alpha_values = [0.0]
+
+    results = []
+
+    results = []
+
+    for K in K_values:
+        for alpha in alpha_values:
+            print("=" * 50)
+            print(f"Training model with K={K}, alpha={alpha}\n")
+            
+            model = CollabFilterOneVectorPerItem(
+                n_epochs=10,
+                batch_size=1000,  # DO NOT CHANGE
+                step_size=0.1,
+                n_factors=K,
+                alpha=alpha
+            )
+            model.init_parameter_dict(n_users, n_items, train_tuple)
+            model.fit(train_tuple, valid_tuple)
+
+            val_metrics = model.evaluate_perf_metrics(*valid_tuple)
+            test_metrics = model.evaluate_perf_metrics(*test_tuple)
+
+            val_rmse = val_metrics["rmse"]
+            val_mae = val_metrics["mae"]
+            test_rmse = test_metrics["rmse"]
+            test_mae = test_metrics["mae"]
+
+            results.append({
+                "K": K,
+                "alpha": alpha,
+                "val_rmse": val_rmse,
+                "val_mae": val_mae,
+                "test_rmse": test_rmse,
+                "test_mae": test_mae,
+                "trace_epoch": model.trace_epoch,
+                "trace_rmse_train": model.trace_rmse_train,
+                "trace_rmse_valid": model.trace_rmse_valid
+            })
+    for res in results:
+        print(res["trace_epoch"])
+    
+    print("\n=== Final Scores for All Models ===\n")
+
+    for res in results:
+        print(f"K = {res['K']}, alpha = {res['alpha']} - "
+            f"Validation RMSE: {res['val_rmse']}, MAE: {res['val_mae']} - "
+            f"Test RMSE: {res['test_rmse']}, MAE: {res['test_mae']}")
+
+    # get values for plotting
+    trace_epoch_vals = [res["trace_epoch"] for res in results]
+    trace_rmse_train_vals = [res["trace_rmse_train"] for res in results]
+    trace_rmse_valid_vals = [res["trace_rmse_valid"] for res in results]
+    print(trace_epoch_vals)
+    print(trace_epoch_vals)
+
+    plt.figure(figsize=(10, 6))
+    plt.title("Validation RMSE vs Epoch")
+    plt.xlabel("Number of Latent Factors (K)")
+    plt.ylabel("Validation RMSE")
+    plt.plot(trace_epoch_vals, trace_rmse_train_vals, marker='o', label='Train MAE')
+    plt.plot(trace_epoch_vals, trace_rmse_valid_vals, label='Validation RMSE', marker='s')
+    plt.legend()
+    plt.show()
+  #________________________________________________________________________________
+    # to have right scale as the dataset (right num users and items)
+    # model = CollabFilterOneVectorPerItem(
+    #     n_epochs=10, batch_size=10000, step_size=0.1,
+    #     n_factors=2, alpha=0.0)
+    # model.init_parameter_dict(n_users, n_items, train_tuple)
+
+    # # Fit the model with SGD
+    # model.fit(train_tuple, valid_tuple)
