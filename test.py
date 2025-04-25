@@ -1,21 +1,14 @@
-import autograd.numpy as ag_np
+import numpy as np
+# Number of predicted ratings
+num_ratings = 10000
 
-# Random example with 3 users and 3 items, 2 latent factors each
-user_vectors = ag_np.array([
-    [1.0, 2.0],    # user 0
-    [0.5, -1.0],   # user 1
-    [-2.0, 0.0]    # user 2
-])
+# Generate random predicted ratings between 1 and 5 (inclusive)
+predicted_ratings = np.random.randint(1, 6, size=num_ratings)
 
-item_vectors = ag_np.array([
-    [3.0, 1.0],    # item 0
-    [-1.0, 2.0],   # item 1
-    [0.0, -1.0]    # item 2
-])
+# Filepath to save the ratings
+file_path = "predicted_ratings_leaderboard.txt"
 
-# Compute interaction scores (dot products)
-interaction_scores = ag_np.sum(user_vectors * item_vectors, axis=1)
+# Save the ratings to a text file, one rating per line
+np.savetxt(file_path, predicted_ratings, fmt='%d')
 
-print("User vectors:\n", user_vectors)
-print("Item vectors:\n", item_vectors)
-print("Dot products (interaction_scores):", interaction_scores)
+print(f"File saved at: {file_path}")

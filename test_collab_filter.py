@@ -15,8 +15,8 @@ from AbstractBaseCollabFilterSGD import AbstractBaseCollabFilterSGD
 from train_valid_test_loader import load_train_valid_test_datasets
 
 # Some packages you might need (uncomment as necessary)
-## import pandas as pd
-## import matplotlib
+import pandas as pd
+import matplotlib.pyplot as plt
 
 # No other imports specific to ML (e.g. scikit) needed!
 
@@ -123,104 +123,74 @@ class CollabFilterOneVectorPerItem(AbstractBaseCollabFilterSGD):
 
 
 if __name__ == '__main__':
-
     # Load the dataset
     train_tuple, valid_tuple, test_tuple, n_users, n_items = \
         load_train_valid_test_datasets()
 
-    K_values = [2] # turn this into a loop later
-    alpha = 0.0
+    # Set the value of K (number of latent factors)
+    K_values = [2, 10, 50]  # You can set this to any value, for now just one at a time
+    alpha = 0.1  # Regularization strength (set as needed)
+
+    results = {}  # Store results for all K values, as a dictionary
+
+    # Loop over each value of K (optional for later testing multiple K)
     for K in K_values:
-        # Create an instance of the model
+        print(f"\nTraining model with K = {K}, alpha = {alpha}")
+
+        # Create the model with the specified parameters
         model = CollabFilterOneVectorPerItem(
-            n_epochs=10,               # Number of epochs for training
+            n_epochs=100,               # Number of epochs for training
             batch_size=1000,           # Fixed batch size of 1000
-            step_size=0.1,             # Learning rate (you can adjust this if needed)
-            n_factors=K,               # Set the number of latent factors to K
-            alpha=alpha                # Set regularization strength to 0
+            step_size=0.1,             # Learning rate
+            n_factors=50,               # Set the number of latent factors to K
+            alpha=alpha                # Set regularization strength
         )
 
+        # Initialize model parameters
         model.init_parameter_dict(n_users, n_items, train_tuple)
 
         # Fit the model with SGD
         model.fit(train_tuple, valid_tuple)
 
-        # # Store the results (trace data for RMSE)
-        # results.append({
-        #     "K": K,
-        #     "trace_epoch": model.trace_epoch,
-        #     "trace_rmse_train": model.trace_rmse_train,
-        #     "trace_rmse_valid": model.trace_rmse_valid,
-        # })
+        # Initialize an empty list for this K value in results dictionary
+        if K not in results:
+            results[K] = []  # Create a list for each K if it doesn't exist
 
+        # Store the results (trace data for RMSE)
+        results[K].append({
+            "K": K,
+            "trace_epoch": model.trace_epoch,
+            "trace_rmse_train": model.trace_rmse_train,
+            "trace_rmse_valid": model.trace_rmse_valid,
+        })
 
+        # Optionally, evaluate and print final results (validation/test performance)
+        val_metrics = model.evaluate_perf_metrics(*valid_tuple)
+        test_metrics = model.evaluate_perf_metrics(*test_tuple)
 
+        print(f"Validation RMSE: {val_metrics['rmse']}, Validation MAE: {val_metrics['mae']}")
+        print(f"Test RMSE: {test_metrics['rmse']}, Test MAE: {test_metrics['mae']}")
 
+    # After training, generate the RMSE vs. epoch plot for a single value of K
+    K = 50  # Choose the value of K you want to plot
 
+    # Extract the trace data for the current value of K
+    trace_rmse_train = [res["trace_rmse_train"] for res in results[K]][0]
+    trace_rmse_valid = [res["trace_rmse_valid"] for res in results[K]][0]
+    trace_epoch = [res["trace_epoch"] for res in results[K]][0]
 
+    # Plot the RMSE for train and validation
+    plt.figure(figsize=(8, 6))
+    plt.plot(trace_epoch, trace_rmse_train, label="Train RMSE", color="blue")
+    plt.plot(trace_epoch, trace_rmse_valid, label="Validation RMSE", color="orange")
 
-# #________________________________________________________________________
-#     # Set the three values for K (number of latent factors)
-#     K_values = [2, 10, 50]
-#     alpha = 0.0  # No regularization for this step
+    # Set titles, labels, and legends
+    plt.title(f'RMSE vs Epoch for K={K}')
+    plt.xlabel('Epoch')
+    plt.ylabel('RMSE')
+    plt.legend()
+    plt.grid(True)
 
-#     results = []  # Store results for all K values
-
-#     # Loop over each value of K
-#     for K in K_values:
-#         print(f"\nTraining model with K = {K}, alpha = {alpha}")
-
-#         # Create the model with the specified parameters
-#         model = CollabFilterOneVectorPerItem(
-#             n_epochs=200,               # Number of epochs for training
-#             batch_size=1000,           # Fixed batch size of 1000
-#             step_size=0.1,             # Learning rate (you can adjust this if needed)
-#             n_factors=K,               # Set the number of latent factors to K
-#             alpha=alpha                # Set regularization strength to 0
-#         )
-
-#         # Initialize model parameters
-#         model.init_parameter_dict(n_users, n_items, train_tuple)
-
-#         # Fit the model with SGD
-#         model.fit(train_tuple, valid_tuple)
-
-#         # Store the results (trace data for RMSE)
-#         results.append({
-#             "K": K,
-#             "trace_epoch": model.trace_epoch,
-#             "trace_rmse_train": model.trace_rmse_train,
-#             "trace_rmse_valid": model.trace_rmse_valid,
-#         })
-
-#         # Optionally, evaluate and print final results (validation/test performance)
-#         val_metrics = model.evaluate_perf_metrics(*valid_tuple)
-#         test_metrics = model.evaluate_perf_metrics(*test_tuple)
-        
-#         print(f"Validation RMSE: {val_metrics['rmse']}, Validation MAE: {val_metrics['mae']}")
-#         print(f"Test RMSE: {test_metrics['rmse']}, Test MAE: {test_metrics['mae']}")
-
-#     # After training, generate the RMSE vs. epoch plots
-#     fig, axes = plt.subplots(1, 3, figsize=(18, 6))
-
-#     # Loop over K_values (2, 10, 50) and plot the RMSE traces
-#     for i, K in enumerate([2, 10, 50]):
-#         # Extract the trace data for the current value of K
-#         trace_rmse_train = [res["trace_rmse_train"] for res in results if res["K"] == K][0]
-#         trace_rmse_valid = [res["trace_rmse_valid"] for res in results if res["K"] == K][0]
-#         trace_epoch = [res["trace_epoch"] for res in results if res["K"] == K][0]
-        
-#         # Plot the RMSE for train and validation
-#         axes[i].plot(trace_epoch, trace_rmse_train, label="Train RMSE", color="blue")
-#         axes[i].plot(trace_epoch, trace_rmse_valid, label="Validation RMSE", color="orange")
-        
-#         # Set titles, labels, and legends
-#         axes[i].set_title(f'RMSE vs Epoch for K={K}')
-#         axes[i].set_xlabel('Epoch')
-#         axes[i].set_ylabel('RMSE')
-#         axes[i].legend()
-#         axes[i].grid(True)
-
-#     # Adjust layout and show the plot
-#     plt.tight_layout()
-#     plt.show()
+    # Show the plot
+    plt.tight_layout()
+    plt.show()
