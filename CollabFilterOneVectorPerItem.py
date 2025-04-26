@@ -116,8 +116,6 @@ class CollabFilterOneVectorPerItem(AbstractBaseCollabFilterSGD):
         loss_total += l2_penalty
 
         return loss_total
- 
-
 
 
 if __name__ == '__main__':
